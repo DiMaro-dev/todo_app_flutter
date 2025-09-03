@@ -36,11 +36,12 @@ class MyHomePage extends StatefulWidget { // widget con stato
 
   @override
   State<MyHomePage> createState() => _MyHomePageState();
-  // creazione dello stato associato al widget
+// creazione dello stato associato al widget
 }
 
 class _MyHomePageState extends State<MyHomePage> {
   List<Task> tasks = []; // lista di oggetti appartenenti a Task
+  bool _showCompletionMessage = false; // controlla se mostrare il messaggio di completamento
 
   // Funzione che mostra un dialog per aggiungere una task
   void _showAddTaskDialog() {
@@ -135,10 +136,10 @@ class _MyHomePageState extends State<MyHomePage> {
                     final String title = controller.text.trim();
                     if (title.isNotEmpty) {
                       DateTime? finalDateTime;
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////7
-                     /////CONTINUARE DA QUI
-                      // sistemare -- anche se selezionato solo la data va bene niente orario, mentre se solo orario mette di default data corrente.
+
+                      // Gestione data/ora migliorata
                       if (selectedDate != null && selectedTime != null) {
+                        // Se sono selezionati sia data che ora
                         finalDateTime = DateTime(
                           selectedDate!.year,
                           selectedDate!.month,
@@ -146,16 +147,36 @@ class _MyHomePageState extends State<MyHomePage> {
                           selectedTime!.hour,
                           selectedTime!.minute,
                         );
+                      } else if (selectedDate != null) {
+                        // Se è selezionata solo la data (imposta mezzanotte come orario predefinito)
+                        finalDateTime = DateTime(
+                          selectedDate!.year,
+                          selectedDate!.month,
+                          selectedDate!.day,
+                        );
+                      } else if (selectedTime != null) {
+                        // Se è selezionato solo l'orario (usa la data corrente)
+                        final now = DateTime.now();
+                        finalDateTime = DateTime(
+                          now.year,
+                          now.month,
+                          now.day,
+                          selectedTime!.hour,
+                          selectedTime!.minute,
+                        );
                       }
 
                       Navigator.of(context).pop(); // Chiude prima il dialog
 
-                      // Poi aggiorna la lista nel vero setState
+                      // Poi aggiorna la lista
                       setState(() {
                         tasks.add(Task(
                           title: title,
                           taskDate: finalDateTime,
                         ));
+
+                        // Controlla se tutte le task sono completate dopo l'aggiunta
+                        _checkAllTasksCompleted();
                       });
                     }
                   },
@@ -172,54 +193,113 @@ class _MyHomePageState extends State<MyHomePage> {
   void _setTask(int index) {
     setState(() {
       tasks[index].isDone = !tasks[index].isDone;
+
+      // Controlla se tutte le task sono completate
+      _checkAllTasksCompleted();
     });
+  }
+
+  // Controlla se tutte le task sono completate e mostra il messaggio temporaneo
+  void _checkAllTasksCompleted() {
+    final allTasksCompleted = tasks.isNotEmpty && tasks.every((task) => task.isDone);
+
+    if (allTasksCompleted) {
+      // Mostra il messaggio di completamento
+      setState(() {
+        _showCompletionMessage = true;
+      });
+
+      // Nasconde il messaggio dopo 3 secondi
+      Future.delayed(const Duration(seconds: 3), () {
+        if (mounted) {
+          setState(() {
+            _showCompletionMessage = false;
+          });
+        }
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return Scaffold( // fornisce la struttura base dell'interfaccia
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         title: Text(widget.title),
       ),
-      body: tasks.isEmpty
-          ? const Center(
-        child: Text(
-          'Non ci sono attività',
-          style: TextStyle(fontSize: 18),
-        ),
-      )
-          : ListView.builder(
-        itemCount: tasks.length,
-        itemBuilder: (context, index) {
-          final task = tasks[index];
-          return ListTile(
-            leading: IconButton(
-              icon: Icon(
-                task.isDone ? Icons.check_box : Icons.check_box_outline_blank,
-                color: task.isDone ? Colors.green : null,
-              ),
-              onPressed: () => _setTask(index),
+      body: Stack(
+        children: [
+          // Mostra la lista di task o il messaggio di nessuna attività
+          tasks.isEmpty // se non ci sono task
+              ? const Center(
+            child: Text(
+              'Non ci sono attività', // scrive questo
+              // magaria aggiungere anche animazione o gif..
+              style: TextStyle(fontSize: 18),
             ),
-            title: Text(
-              task.title,
-              style: TextStyle(
-                decoration: task.isDone
-                    ? TextDecoration.lineThrough
-                    : TextDecoration.none,
-                color: task.isDone ? Colors.grey : null,
+          )
+          // altrimenti mostra la lista di tutte le task disponibili
+              : ListView.builder( // crea solo i widget visibili.
+            itemCount: tasks.length, // lunghezza della lista basata su quante Task
+            itemBuilder: (context, index) { // accede alla task all'indice index
+              final task = tasks[index];
+              return ListTile(
+                leading: IconButton(
+                  icon: Icon(
+                    task.isDone ? Icons.check_box : Icons.check_box_outline_blank,
+                    color: task.isDone ? Colors.green : null,
+                  ),
+                  onPressed: () => _setTask(index), // imposta lo stato della task a fatto e viceversa
+                ),
+                title: Text(
+                  task.title,
+                  style: TextStyle(
+                    decoration: task.isDone
+                        ? TextDecoration.lineThrough
+                        : TextDecoration.none,
+                    color: task.isDone ? Colors.grey : null,
+                  ),
+                ),
+                subtitle: task.taskDate != null
+                    ? Text(
+                  '${task.taskDate!.day}/${task.taskDate!.month}/${task.taskDate!.year} ${task.taskDate!.hour}:${task.taskDate!.minute.toString().padLeft(2, '0')}',
+                )
+                    : null,
+              );
+            },
+          ),
+
+          // Mostra il messaggio di completamento temporaneo sopra la lista -- da migliorare con qualche animazione carina invece di un banner
+          if (_showCompletionMessage)
+            Container(
+              color: Colors.black.withOpacity(0.7),
+              child: const Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.check_circle_outline,
+                      color: Colors.green,
+                      size: 64,
+                    ),
+                    SizedBox(height: 16),
+                    Text(
+                      'Hai completato tutto, ora riposati',
+                      style: TextStyle(
+                        fontSize: 24,
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
               ),
             ),
-            subtitle: task.taskDate != null
-                ? Text(
-              '${task.taskDate!.day}/${task.taskDate!.month}/${task.taskDate!.year} ${task.taskDate!.hour}:${task.taskDate!.minute.toString().padLeft(2, '0')}',
-            )
-                : null,
-          );
-        },
+        ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _showAddTaskDialog,
+      floatingActionButton: FloatingActionButton.extended( // widget pulsante icona + testo
+        onPressed: _showAddTaskDialog, // richiama il dialog
         tooltip: 'Aggiungi attività',
         label: const Text('Add new'),
         icon: const Icon(Icons.add),
